@@ -1,4 +1,9 @@
 use std::collections::HashMap;
+use std::mem::zeroed;
+// For the audio
+use rodio::{Decoder, OutputStream, Sink};
+use std::io::Cursor;
+// For the keyboard hook
 use std::ptr::null_mut;
 use winapi::shared::minwindef::{LPARAM, LRESULT, WPARAM};
 use winapi::um::libloaderapi::GetModuleHandleW;
@@ -8,11 +13,13 @@ use winapi::um::winuser::{
     VK_RWIN, WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP,
 };
 
+// The key mapper struct
 struct KeyMapper {
     lowercase_map: HashMap<char, char>,
     uppercase_map: HashMap<char, char>,
 }
 
+// The key mapper implementation
 impl KeyMapper {
     fn new() -> Self {
         KeyMapper {
@@ -54,10 +61,11 @@ impl KeyMapper {
     }
 }
 
+// The global variables
 static mut KEY_MAPPER: Option<KeyMapper> = None;
 static mut IS_MAPPING_ENABLED: bool = true;
 static mut IS_TOGGLE_PROCESSED: bool = false;
-static START: &str = "
+static RUNES_LOGO: &str = "
 8b,dPPYba, 88       88 8b,dPPYba,   ,adPPYba, ,adPPYba,  
 88P'   \"Y8 88       88 88P'   `\"8a a8P_____88 I8[    \"\"  
 88         88       88 88       88 8PP\"\"\"\"\"\"\"  `\"Y8ba,   
@@ -65,6 +73,23 @@ static START: &str = "
 88          `\"YbbdP'Y8 88       88  `\"Ybbd8\"' `\"YbbdP\"'
 ";
 
+// Load the sound data
+static ACTIVATED_SOUND: &[u8] = include_bytes!("sounds/mixkit-big-fire-spell-burning-1332.wav");
+static DEACTIVATED_SOUND: &[u8] = include_bytes!("sounds/mixkit-powerful-air-whooshes-3220.wav");
+
+// The main menu
+static MENU: &str = "
+ᚨᛒᚲᚦᛅᚠᛞᚺᛁᚴᛘᛐᛖᚾᛜᛩᛶᛃᛋᛄᚢᛡᚳ×ᛣᛇᚨᛒᚲᚦᛅᚠᛞᚺᛁᚴᛘᛐᛖᚾᛜᛩᛶᛃᛋᛄᚢᛡᚳ×ᛣᛇᚨᛒᚲᚦᛅᚠᛞᚺᛁᚴᛘᛐᛖᚾᛜᛩᛶᛃᛋᛄᚢᛡᚳ×ᛣᛇᚨᛒᚲᚦᛅᚠᛞ
+ᚨ                            𖤍 𖤍     ᛤᚪᛚᛯᛉᚱᛂᚯ     𖤍 𖤍                               ᚺ
+ᛒ               𖤍 𖤍   Welcome to the Runic Keyboard mapper!   𖤍 𖤍                   ᛁ
+ᚲ      This application will map the English alphabet to the Valkyrie lang runes.   ᚴ
+ᚦ                   Press Ctrl + Alt + M to toggle the mapping.                     ᛘ
+ᛅ                Press Shift + (number) to use the custom symboogy.                 ᛐ
+ᛞ                  Press Ctrl + Alt + Q to exit the application.                    ᛖ
+ᚨᛒᚲᚦᛅᚠᛞᚺᛁᚴᛘᛐᛖᚾᛜᛩᛶᛃᛋᛄᚢᛡᚳ×ᛣᛇᚨᛒᚲᚦᛅᚠᛞᚺᛁᚴᛘᛐᛖᚾᛜᛩᛶᛃᛋᛄᚢᛡᚳ×ᛣᛇᚨᛒᚲᚦᛅᚠᛞᚺᛁᚴᛘᛐᛖᚾᛜᛩᛶᛃᛋᛄᚢᛡᚳ×ᛣᛇᚨᛒᚲᚦᛅᚠᛞ
+";
+
+// The keyboard hook
 unsafe extern "system" fn keyboard_hook(code: i32, w_param: WPARAM, l_param: LPARAM) -> LRESULT {
     if code >= 0 {
         let kb_struct = *(l_param as *const KBDLLHOOKSTRUCT);
@@ -102,6 +127,7 @@ unsafe extern "system" fn keyboard_hook(code: i32, w_param: WPARAM, l_param: LPA
     CallNextHookEx(null_mut(), code, w_param, l_param)
 }
 
+// Process the key mapping event
 fn process_key_mapping_event(
     vk_code: char,
     is_shift_pressed: bool,
@@ -111,40 +137,63 @@ fn process_key_mapping_event(
         if let Some(ref key_mapper) = KEY_MAPPER {
             if let Some(mapped_key) = key_mapper.map_key(vk_code, is_shift_pressed) {
                 if w_param == WM_KEYDOWN as WPARAM {
-                    let mut input = INPUT {
-                        type_: INPUT_KEYBOARD,
-                        u: std::mem::zeroed(),
-                    };
-                    let ki = input.u.ki_mut();
-                    ki.wVk = 0; // No virtual key code is needed for Unicode input
-                    ki.wScan = mapped_key as u16; // Set the Unicode character to be sent
-                    ki.dwFlags = KEYEVENTF_UNICODE; // Use Unicode event flag
-                    ki.time = 0;
-                    ki.dwExtraInfo = 0;
-                    SendInput(1, &mut input, std::mem::size_of::<INPUT>() as i32);
+                    let unicode_value = mapped_key as u32;
+
+                    if unicode_value <= 0xFFFF {
+                        // For BMP characters (code point ≤ 0xFFFF)
+                        let mut input = INPUT {
+                            type_: INPUT_KEYBOARD,
+                            u: zeroed(),
+                        };
+
+                        let ki = input.u.ki_mut();
+
+                        ki.wVk = 0;
+                        ki.wScan = mapped_key as u16;
+                        ki.dwFlags = KEYEVENTF_UNICODE;
+                        ki.time = 0;
+                        ki.dwExtraInfo = 0;
+                        SendInput(1, &mut input, std::mem::size_of::<INPUT>() as i32);
+                    } else {
+                        // For extended Unicode (code points > 0xFFFF), send surrogate pairs
+                        let high_surrogate = ((unicode_value - 0x10000) / 0x400 + 0xD800) as u16;
+                        let low_surrogate = ((unicode_value - 0x10000) % 0x400 + 0xDC00) as u16;
+
+                        // Send the high surrogate
+                        let mut high_input = INPUT {
+                            type_: INPUT_KEYBOARD,
+                            u: zeroed(),
+                        };
+                        let high_ki = high_input.u.ki_mut();
+                        high_ki.wVk = 0;
+                        high_ki.wScan = high_surrogate;
+                        high_ki.dwFlags = KEYEVENTF_UNICODE;
+                        high_ki.time = 0;
+                        high_ki.dwExtraInfo = 0;
+                        SendInput(1, &mut high_input, std::mem::size_of::<INPUT>() as i32);
+
+                        // Send the low surrogate
+                        let mut low_input = INPUT {
+                            type_: INPUT_KEYBOARD,
+                            u: zeroed(),
+                        };
+                        let low_ki = low_input.u.ki_mut();
+                        low_ki.wVk = 0;
+                        low_ki.wScan = low_surrogate;
+                        low_ki.dwFlags = KEYEVENTF_UNICODE;
+                        low_ki.time = 0;
+                        low_ki.dwExtraInfo = 0;
+                        SendInput(1, &mut low_input, std::mem::size_of::<INPUT>() as i32);
+                    }
+                    return Some(1); // Block the original event
                 }
-                return Some(1); // Block the original event
             }
         }
         None
     }
 }
 
-fn process_easter_egg(
-    is_ctrl_pressed: bool,
-    is_alt_pressed: bool,
-    vk_code: char,
-    w_param: usize,
-) -> Option<isize> {
-    if is_ctrl_pressed && is_alt_pressed && vk_code == 'Y' {
-        if w_param == WM_KEYDOWN as WPARAM {
-            println!("{}", START);
-        }
-        return Some(1); // Block the original event
-    }
-    None
-}
-
+// Process the exit command
 fn process_exit_command(
     is_ctrl_pressed: bool,
     is_alt_pressed: bool,
@@ -160,6 +209,23 @@ fn process_exit_command(
     }
 }
 
+// Process the easteregg command
+fn process_easter_egg(
+    is_ctrl_pressed: bool,
+    is_alt_pressed: bool,
+    vk_code: char,
+    w_param: usize,
+) -> Option<isize> {
+    if is_ctrl_pressed && is_alt_pressed && vk_code == 'Y' {
+        if w_param == WM_KEYDOWN as WPARAM {
+            println!("{}", RUNES_LOGO);
+        }
+        return Some(1); // Block the original event
+    }
+    None
+}
+
+// Toggle the runes mapping
 fn toggle_runes(
     is_ctrl_pressed: bool,
     is_alt_pressed: bool,
@@ -171,7 +237,8 @@ fn toggle_runes(
             if w_param == WM_KEYDOWN as WPARAM && !IS_TOGGLE_PROCESSED {
                 IS_MAPPING_ENABLED = !IS_MAPPING_ENABLED;
                 IS_TOGGLE_PROCESSED = true;
-                println!("Mapping toggled: {}", IS_MAPPING_ENABLED);
+
+                sound_thread(IS_MAPPING_ENABLED);
             } else if w_param == WM_KEYUP as WPARAM {
                 IS_TOGGLE_PROCESSED = false;
             }
@@ -181,6 +248,34 @@ fn toggle_runes(
     }
 }
 
+// Play the sound
+fn sound_thread(is_mapping_thread: bool) {
+    match is_mapping_thread {
+        true => println!("Runes Awakened! You’ve been blessed by the ancient spirits 🔥🐦‍🔥"),
+        false => println!("Runes Slumbering. The ancient spirits are resting... 💨❄️"),
+    }
+    std::thread::spawn(move || {
+        let (_stream, stream_handle) = OutputStream::try_default().unwrap();
+        let sink = Sink::try_new(&stream_handle).unwrap();
+
+        match is_mapping_thread {
+            true => {
+                let cursor = Cursor::new(ACTIVATED_SOUND);
+                let source = Decoder::new(cursor).unwrap();
+                sink.append(source);
+                sink.sleep_until_end();
+            }
+            false => {
+                let cursor = Cursor::new(DEACTIVATED_SOUND);
+                let source = Decoder::new(cursor).unwrap();
+                sink.append(source);
+                sink.sleep_until_end();
+            }
+        }
+    });
+}
+
+// Generate the key mapping
 fn generate_mapping() -> KeyMapper {
     let mut key_mapper = KeyMapper::new();
     key_mapper.add_mapping('A', 'ᚨ', 'ᚪ');
@@ -209,15 +304,27 @@ fn generate_mapping() -> KeyMapper {
     key_mapper.add_mapping('X', '×', 'ᚷ');
     key_mapper.add_mapping('Y', 'ᛣ', 'ᛉ');
     key_mapper.add_mapping('Z', 'ᛇ', 'ᛢ');
+    // key_mapper.add_mapping('+', '᛭', '᛭');
+    key_mapper.add_mapping('1', '1', '𖤍');
+    key_mapper.add_mapping('2', '2', '♅');
+    key_mapper.add_mapping('3', '3', '↟');
+    key_mapper.add_mapping('4', '4', '↡');
+    key_mapper.add_mapping('5', '5', '↠');
+    key_mapper.add_mapping('6', '6', '↞');
+    key_mapper.add_mapping('7', '7', '𒌐');
+    key_mapper.add_mapping('8', '8', '𖤓');
+    key_mapper.add_mapping('9', '9', '☽');
+    key_mapper.add_mapping('0', '0', '🕈'); // ⴵ
 
     key_mapper
 }
 
+// The main function
 fn main() {
-    println!("Welcome to the Runic Keyboard!");
-    println!("This application will map the English alphabet to the Valkyrie lang runes.");
-    println!("Press Ctrl + Alt + M to toggle the mapping.");
-    println!("Press Ctrl + Alt + Q to exit the application.");
+    println!("{MENU}");
+
+    sound_thread(true);
+
     unsafe {
         let key_mapper = generate_mapping();
 
