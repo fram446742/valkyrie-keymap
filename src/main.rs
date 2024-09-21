@@ -9,8 +9,8 @@ use winapi::shared::minwindef::{LPARAM, LRESULT, WPARAM};
 use winapi::um::libloaderapi::GetModuleHandleW;
 use winapi::um::winuser::{
     CallNextHookEx, GetAsyncKeyState, GetKeyState, SendInput, SetWindowsHookExW, INPUT,
-    INPUT_KEYBOARD, KBDLLHOOKSTRUCT, KEYEVENTF_UNICODE, VK_CAPITAL, VK_CONTROL, VK_LWIN, VK_MENU,
-    VK_RWIN, WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP,
+    INPUT_KEYBOARD, KBDLLHOOKSTRUCT, KEYEVENTF_UNICODE, VK_CAPITAL, VK_CONTROL, VK_LSHIFT, VK_LWIN,
+    VK_MENU, VK_RSHIFT, VK_RWIN, WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP,
 };
 
 // The key mapper struct
@@ -65,14 +65,6 @@ impl KeyMapper {
 static mut KEY_MAPPER: Option<KeyMapper> = None;
 static mut IS_MAPPING_ENABLED: bool = true;
 static mut IS_TOGGLE_PROCESSED: bool = false;
-static RUNES_LOGO: &str = "
-8b,dPPYba, 88       88 8b,dPPYba,   ,adPPYba, ,adPPYba,  
-88P'   \"Y8 88       88 88P'   `\"8a a8P_____88 I8[    \"\"  
-88         88       88 88       88 8PP\"\"\"\"\"\"\"  `\"Y8ba,   
-88         \"8a,   ,a88 88       88 \"8b,   ,aa aa    ]8I  
-88          `\"YbbdP'Y8 88       88  `\"Ybbd8\"' `\"YbbdP\"'
-";
-
 // Load the sound data
 static ACTIVATED_SOUND: &[u8] = include_bytes!("sounds/mixkit-big-fire-spell-burning-1332.wav");
 static DEACTIVATED_SOUND: &[u8] = include_bytes!("sounds/mixkit-powerful-air-whooshes-3220.wav");
@@ -84,7 +76,7 @@ static MENU: &str = "
 ᛒ               𖤍 𖤍   Welcome to the Runic Keyboard mapper!   𖤍 𖤍                   ᛁ
 ᚲ      This application will map the English alphabet to the Valkyrie lang runes.   ᚴ
 ᚦ                   Press Ctrl + Alt + M to toggle the mapping.                     ᛘ
-ᛅ                Press Shift + (number) to use the custom symboogy.                 ᛐ
+ᛅ               Press RShift + (number) to use the custom symbology.                ᛐ
 ᛞ                  Press Ctrl + Alt + Q to exit the application.                    ᛖ
 ᚨᛒᚲᚦᛅᚠᛞᚺᛁᚴᛘᛐᛖᚾᛜᛩᛶᛃᛋᛄᚢᛡᚳ×ᛣᛇᚨᛒᚲᚦᛅᚠᛞᚺᛁᚴᛘᛐᛖᚾᛜᛩᛶᛃᛋᛄᚢᛡᚳ×ᛣᛇᚨᛒᚲᚦᛅᚠᛞᚺᛁᚴᛘᛐᛖᚾᛜᛩᛶᛃᛋᛄᚢᛡᚳ×ᛣᛇᚨᛒᚲᚦᛅᚠᛞ
 ";
@@ -96,8 +88,10 @@ unsafe extern "system" fn keyboard_hook(code: i32, w_param: WPARAM, l_param: LPA
         if w_param == WM_KEYDOWN as WPARAM || w_param == WM_KEYUP as WPARAM {
             let vk_code = kb_struct.vkCode as u8 as char;
 
-            // Check if the Shift key is pressed
-            let is_shift_pressed = (GetAsyncKeyState(0x10) & 0x8000u16 as i16) != 0;
+            // Check if the Left Shift key is pressed
+            let is_left_shift_pressed = (GetAsyncKeyState(VK_LSHIFT) & 0x8000u16 as i16) != 0;
+            // Check if the Right Shift key is pressed
+            let is_right_shift_pressed = (GetAsyncKeyState(VK_RSHIFT) & 0x8000u16 as i16) != 0;
             // Check if the Ctrl is pressed
             let is_ctrl_pressed = (GetAsyncKeyState(VK_CONTROL) & 0x8000u16 as i16) != 0;
             // Check if the Alt is pressed
@@ -111,15 +105,13 @@ unsafe extern "system" fn keyboard_hook(code: i32, w_param: WPARAM, l_param: LPA
             // Check for Ctrl + Alt + Q combination
             process_exit_command(is_ctrl_pressed, is_alt_pressed, vk_code, w_param);
 
-            // Check for easteregg combination
-            if let Some(value) =
-                process_easter_egg(is_ctrl_pressed, is_alt_pressed, vk_code, w_param)
-            {
-                return value;
-            }
-
             // Check if the key is mapped
-            if let Some(value) = process_key_mapping_event(vk_code, is_shift_pressed, w_param) {
+            if let Some(value) = process_key_mapping_event(
+                vk_code,
+                is_left_shift_pressed,
+                is_right_shift_pressed,
+                w_param,
+            ) {
                 return value;
             }
         }
@@ -130,12 +122,18 @@ unsafe extern "system" fn keyboard_hook(code: i32, w_param: WPARAM, l_param: LPA
 // Process the key mapping event
 fn process_key_mapping_event(
     vk_code: char,
-    is_shift_pressed: bool,
+    is_left_shift_pressed: bool,
+    is_right_shift_pressed: bool,
     w_param: usize,
 ) -> Option<isize> {
     unsafe {
+        // Verificar si la tecla Shift derecha está presionada y el carácter es un número
+        if is_left_shift_pressed && vk_code.is_digit(10) {
+            return None; // Permitir que el evento original sea procesado
+        }
+
         if let Some(ref key_mapper) = KEY_MAPPER {
-            if let Some(mapped_key) = key_mapper.map_key(vk_code, is_shift_pressed) {
+            if let Some(mapped_key) = key_mapper.map_key(vk_code, is_right_shift_pressed) {
                 if w_param == WM_KEYDOWN as WPARAM {
                     let unicode_value = mapped_key as u32;
 
@@ -209,22 +207,6 @@ fn process_exit_command(
     }
 }
 
-// Process the easteregg command
-fn process_easter_egg(
-    is_ctrl_pressed: bool,
-    is_alt_pressed: bool,
-    vk_code: char,
-    w_param: usize,
-) -> Option<isize> {
-    if is_ctrl_pressed && is_alt_pressed && vk_code == 'Y' {
-        if w_param == WM_KEYDOWN as WPARAM {
-            println!("{}", RUNES_LOGO);
-        }
-        return Some(1); // Block the original event
-    }
-    None
-}
-
 // Toggle the runes mapping
 fn toggle_runes(
     is_ctrl_pressed: bool,
@@ -250,9 +232,12 @@ fn toggle_runes(
 
 // Play the sound
 fn sound_thread(is_mapping_thread: bool) {
-    match is_mapping_thread {
-        true => println!("Runes Awakened! You’ve been blessed by the ancient spirits 🔥🐦‍🔥"),
-        false => println!("Runes Slumbering. The ancient spirits are resting... 💨❄️"),
+    if is_mapping_thread {
+        println!("Runes Awakened! You’ve been blessed by the ancient spirits 🔥🐦‍🔥");
+        print!("\x1B[1A\x1B[2K"); // Move cursor up one line and clear the line
+    } else {
+        println!("Runes Slumbering. The ancient spirits are resting... 💨❄️");
+        print!("\x1B[1A\x1B[2K"); // Move cursor up one line and clear the line
     }
     std::thread::spawn(move || {
         let (_stream, stream_handle) = OutputStream::try_default().unwrap();
