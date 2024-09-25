@@ -300,6 +300,7 @@ fn generate_mapping() -> KeyMapper {
     key_mapper.add_mapping('8', '8', '𖤓');
     key_mapper.add_mapping('9', '9', '☽');
     key_mapper.add_mapping('0', '0', '🕈'); // ⴵ
+    // key_mapper.add_mapping('ñ', 'ñ', '∞'); // ⴵ
 
     key_mapper
 }
