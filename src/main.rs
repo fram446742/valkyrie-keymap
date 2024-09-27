@@ -102,15 +102,6 @@ unsafe extern "system" fn keyboard_hook(code: i32, w_param: WPARAM, l_param: LPA
                 return value;
             }
 
-            println!(
-                "Key: {}, Left Shift: {}, Right Shift: {}, Ctrl: {}, Alt: {}",
-                vk_code,
-                is_left_shift_pressed,
-                is_right_shift_pressed,
-                is_ctrl_pressed,
-                is_alt_pressed
-            );
-
             // Check for Ctrl + Alt + Q combination
             process_exit_command(is_ctrl_pressed, is_alt_pressed, vk_code, w_param);
 
