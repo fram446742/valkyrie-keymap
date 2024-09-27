@@ -102,6 +102,15 @@ unsafe extern "system" fn keyboard_hook(code: i32, w_param: WPARAM, l_param: LPA
                 return value;
             }
 
+            println!(
+                "Key: {}, Left Shift: {}, Right Shift: {}, Ctrl: {}, Alt: {}",
+                vk_code,
+                is_left_shift_pressed,
+                is_right_shift_pressed,
+                is_ctrl_pressed,
+                is_alt_pressed
+            );
+
             // Check for Ctrl + Alt + Q combination
             process_exit_command(is_ctrl_pressed, is_alt_pressed, vk_code, w_param);
 
@@ -133,7 +142,9 @@ fn process_key_mapping_event(
         }
 
         if let Some(ref key_mapper) = KEY_MAPPER {
-            if let Some(mapped_key) = key_mapper.map_key(vk_code, is_left_shift_pressed || is_right_shift_pressed) {
+            if let Some(mapped_key) =
+                key_mapper.map_key(vk_code, is_left_shift_pressed || is_right_shift_pressed)
+            {
                 if w_param == WM_KEYDOWN as WPARAM {
                     let unicode_value = mapped_key as u32;
 
@@ -263,44 +274,60 @@ fn sound_thread(is_mapping_thread: bool) {
 // Generate the key mapping
 fn generate_mapping() -> KeyMapper {
     let mut key_mapper = KeyMapper::new();
-    key_mapper.add_mapping('A', 'ᚨ', 'ᚪ');
-    key_mapper.add_mapping('B', 'ᛒ', 'ᛔ');
-    key_mapper.add_mapping('C', 'ᚲ', 'ᛈ');
-    key_mapper.add_mapping('D', 'ᚦ', 'ᚣ'); // ᚮ
-    key_mapper.add_mapping('E', 'ᛅ', 'ᚯ'); // ᛑ
-    key_mapper.add_mapping('F', 'ᚠ', 'ᚡ');
-    key_mapper.add_mapping('G', 'ᛞ', 'ᛥ');
-    key_mapper.add_mapping('H', 'ᚺ', 'ᚻ');
-    key_mapper.add_mapping('I', 'ᛁ', 'ᛂ');
-    key_mapper.add_mapping('J', 'ᚴ', 'ᚵ');
-    key_mapper.add_mapping('K', 'ᛘ', 'ᛯ');
-    key_mapper.add_mapping('L', 'ᛐ', 'ᛚ');
-    key_mapper.add_mapping('M', 'ᛖ', 'ᛗ');
-    key_mapper.add_mapping('N', 'ᚾ', 'ᚬ');
-    key_mapper.add_mapping('O', 'ᛜ', 'ᛟ');
-    key_mapper.add_mapping('P', 'ᛩ', 'ᚹ');
-    key_mapper.add_mapping('Q', 'ᛶ', 'ᚿ'); // ᛃ
-    key_mapper.add_mapping('R', 'ᛃ', 'ᚱ'); //
-    key_mapper.add_mapping('S', 'ᛋ', 'ᛊ');
-    key_mapper.add_mapping('T', 'ᛄ', 'ᛏ');
-    key_mapper.add_mapping('U', 'ᚢ', 'ᚤ');
-    key_mapper.add_mapping('V', 'ᛡ', 'ᛤ');
-    key_mapper.add_mapping('W', 'ᚳ', 'ᛠ');
-    key_mapper.add_mapping('X', '×', 'ᚷ');
-    key_mapper.add_mapping('Y', 'ᛣ', 'ᛉ');
-    key_mapper.add_mapping('Z', 'ᛇ', 'ᛢ');
-    // key_mapper.add_mapping('+', '᛭', '᛭');
-    key_mapper.add_mapping('1', '1', '𖤍');
-    key_mapper.add_mapping('2', '2', '♅');
-    key_mapper.add_mapping('3', '3', '↟');
-    key_mapper.add_mapping('4', '4', '↡');
-    key_mapper.add_mapping('5', '5', '↠');
-    key_mapper.add_mapping('6', '6', '↞');
-    key_mapper.add_mapping('7', '7', '𒌐');
-    key_mapper.add_mapping('8', '8', '𖤓');
-    key_mapper.add_mapping('9', '9', '☽');
-    key_mapper.add_mapping('0', '0', '🕈'); // ⴵ
-    key_mapper.add_mapping('À', 'ⴵ', '∞'); // ⴵ
+    let mappings = [
+        ('A', 'ᚨ', 'ᚪ'),
+        ('B', 'ᛒ', 'ᛔ'),
+        ('C', 'ᚲ', 'ᛈ'),
+        ('D', 'ᚦ', 'ᚣ'),
+        ('E', 'ᛅ', 'ᚯ'),
+        ('F', 'ᚠ', 'ᚡ'),
+        ('G', 'ᛞ', 'ᛥ'),
+        ('H', 'ᚺ', 'ᚻ'),
+        ('I', 'ᛁ', 'ᛂ'),
+        ('J', 'ᚴ', 'ᚵ'),
+        ('K', 'ᛘ', 'ᛯ'),
+        ('L', 'ᛐ', 'ᛚ'),
+        ('M', 'ᛖ', 'ᛗ'),
+        ('N', 'ᚾ', 'ᚬ'),
+        ('O', 'ᛜ', 'ᛟ'),
+        ('P', 'ᛩ', 'ᚹ'),
+        ('Q', 'ᛶ', 'ᚿ'),
+        ('R', 'ᛃ', 'ᚱ'),
+        ('S', 'ᛋ', 'ᛊ'),
+        ('T', 'ᛄ', 'ᛏ'),
+        ('U', 'ᚢ', 'ᚤ'),
+        ('V', 'ᛡ', 'ᛤ'),
+        ('W', 'ᚳ', 'ᛠ'),
+        ('X', '×', 'ᚷ'),
+        ('Y', 'ᛣ', 'ᛉ'),
+        ('Z', 'ᛇ', 'ᛢ'),
+        ('1', '1', '𖤍'),
+        ('2', '2', '♅'),
+        ('3', '3', '↟'),
+        ('4', '4', '↡'),
+        ('5', '5', '↠'),
+        ('6', '6', '↞'),
+        ('7', '7', '𒌐'),
+        ('8', '8', '𖤓'),
+        ('9', '9', '☽'),
+        ('0', '0', '🕈'),
+        // ('À', 'ⴵ', '∞'), // ñ
+        // ('Û', 'ⴵ', '∞'), // '
+        // ('Ý', 'ⴵ', '∞'), // ¡
+        // ('º', 'ⴵ', '∞'), // `
+        // ('»', 'ⴵ', '∞'), // +
+        // ('¿', 'ⴵ', '∞'), // ç
+        // ('Þ', 'ⴵ', '∞'), // ´
+        // ('¼', 'ⴵ', '∞'), // ,
+        // ('¾', 'ⴵ', '∞'), // .
+        // ('½', 'ⴵ', '∞'), // -
+        // ('â', 'ⴵ', '∞'), // <
+        // ('Ü', 'ⴵ', '∞'), // º
+    ];
+
+    for &(key, lower, upper) in &mappings {
+        key_mapper.add_mapping(key, lower, upper);
+    }
 
     key_mapper
 }
