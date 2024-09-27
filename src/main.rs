@@ -102,6 +102,12 @@ unsafe extern "system" fn keyboard_hook(code: i32, w_param: WPARAM, l_param: LPA
                 return value;
             }
 
+            println!("Key: {}", vk_code);
+            println!("Left Shift: {}", is_left_shift_pressed);
+            println!("Right Shift: {}", is_right_shift_pressed);
+            println!("Ctrl: {}", is_ctrl_pressed);
+            println!("Alt: {}", is_alt_pressed);
+
             // Check for Ctrl + Alt + Q combination
             process_exit_command(is_ctrl_pressed, is_alt_pressed, vk_code, w_param);
 
@@ -133,7 +139,7 @@ fn process_key_mapping_event(
         }
 
         if let Some(ref key_mapper) = KEY_MAPPER {
-            if let Some(mapped_key) = key_mapper.map_key(vk_code, is_right_shift_pressed) {
+            if let Some(mapped_key) = key_mapper.map_key(vk_code, is_left_shift_pressed || is_right_shift_pressed) {
                 if w_param == WM_KEYDOWN as WPARAM {
                     let unicode_value = mapped_key as u32;
 
@@ -300,7 +306,7 @@ fn generate_mapping() -> KeyMapper {
     key_mapper.add_mapping('8', '8', '𖤓');
     key_mapper.add_mapping('9', '9', '☽');
     key_mapper.add_mapping('0', '0', '🕈'); // ⴵ
-    // key_mapper.add_mapping('ñ', 'ñ', '∞'); // ⴵ
+    key_mapper.add_mapping('À', 'ⴵ', '∞'); // ⴵ
 
     key_mapper
 }
